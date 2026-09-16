@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llm-communication_codex"
+version = "0.1.0"
+description = "Reproducible local STT, LLM and TTS evaluation lab"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+llm-communication_codex = "conversation_lab.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["conversation_lab"]

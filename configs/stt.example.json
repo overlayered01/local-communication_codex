@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "root": "..",
+  "seed": 42,
+  "warmups": 1,
+  "repetitions": 3,
+  "allow_remote": false,
+  "providers": {
+    "whisper-small": {
+      "kind": "stt",
+      "adapter": "worker",
+      "engine": "faster_whisper",
+      "command": [
+        "{root}/.venv-whisper/Scripts/python.exe",
+        "{root}/scripts/model_worker.py"
+      ],
+      "timeout_s": 300,
+      "model": "{root}/models/faster-whisper-small",
+      "load": {
+        "device": "cpu",
+        "compute_type": "int8",
+        "local_files_only": true
+      },
+      "params": {
+        "language": "ko",
+        "beam_size": 5,
+        "vad_filter": true
+      }
+    },
+    "chat": {
+      "kind": "llm",
+      "adapter": "ollama",
+      "url": "http://127.0.0.1:11434/api/chat",
+      "model": "qwen3.5:4b",
+      "system": "한국어 존댓말로 자연스럽게 대화하세요. 일상 대화는 한두 문장으로 답하고, 설명을 요청하면 자세히 답하세요. 불필요하게 질문으로 끝내지 마세요.",
+      "params": {
+        "think": false,
+        "keep_alive": -1,
+        "options": {
+          "temperature": 0.5,
+          "seed": 42,
+          "num_ctx": 4096,
+          "num_predict": 160
+        }
+      },
+      "unload_after": true
+    },
+    "voice": {
+      "kind": "tts",
+      "adapter": "worker",
+      "engine": "supertonic",
+      "command": [
+        "{root}/.venv-supertonic/Scripts/python.exe",
+        "{root}/scripts/model_worker.py"
+      ],
+      "timeout_s": 300,
+      "model": "supertone-oss-archive/supertonic-3",
+      "revision": "aafc6e32416a594460b32413efc49d7fe4ce6d46",
+      "voice": "F1",
+      "load": {
+        "model_dir": "{root}/models/supertonic-3",
+        "auto_download": false
+      },
+      "params": {
+        "lang": "ko",
+        "total_steps": 8,
+        "speed": 1
+      }
+    }
+  },
+  "experiments": [
+    {
+      "id": "stt-small",
+      "mode": "stt",
+      "stt": "whisper-small",
+      "dataset": "datasets/ko-stt.example.jsonl"
+    },
+    {
+      "id": "full-pipeline",
+      "mode": "pipeline",
+      "stt": "whisper-small",
+      "llm": "chat",
+      "tts": "voice",
+      "dataset": "datasets/ko-stt.example.jsonl"
+    }
+  ]
+}

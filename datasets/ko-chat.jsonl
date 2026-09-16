@@ -1,0 +1,6 @@
+{"id":"daily","category":"일상","text":"오늘 하루 종일 회의만 해서 좀 지쳤어."}
+{"id":"concise","category":"간결함","text":"잠깐 쉬고 싶은데 뭐 하면 좋을까? 짧게 말해줘."}
+{"id":"context","category":"맥락","messages":[{"role":"user","content":"저녁 메뉴로 김치볶음밥이랑 파스타를 고민하고 있어."},{"role":"assistant","content":"둘 다 좋네요. 어떤 쪽이 더 당기세요?"}],"text":"두 번째 걸로 할게. 재료는 뭐가 필요해?"}
+{"id":"correction","category":"정정반영","messages":[{"role":"user","content":"내 약속은 목요일 세 시야."},{"role":"assistant","content":"목요일 세 시 약속이군요."},{"role":"user","content":"아, 금요일 네 시로 바뀌었어."}],"text":"내 약속 언제라고 했지?"}
+{"id":"unknown","category":"기억정확성","text":"내가 가장 좋아하는 음식이 뭐였지?"}
+{"id":"explain","category":"설명","text":"TTS가 뭔지 컴퓨터를 잘 모르는 사람도 이해하게 설명해줘."}

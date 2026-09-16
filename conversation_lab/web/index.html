@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>llm-communication_codex</title>
+<style>
+:root{font-family:system-ui,'Malgun Gothic',sans-serif;color:#e8edf6;background:#101724;color-scheme:dark}*{box-sizing:border-box}body{margin:0}main{max-width:1160px;margin:auto;padding:40px 24px}h1{font-size:32px;margin:8px 0 12px}h2{font-size:20px}p{line-height:1.65;color:#aebbd0}.eyebrow{color:#74e4c3;letter-spacing:.14em;font-size:12px}.toolbar{display:flex;gap:12px;flex-wrap:wrap;margin:24px 0}button,select,input,textarea{font:inherit;border:1px solid #3e506c;border-radius:8px;padding:10px 14px;background:#1c293e;color:#edf5ff}button{cursor:pointer}button:hover{border-color:#74e4c3}button.active,button.primary{background:#74e4c3;color:#101724}button:disabled{opacity:.5;cursor:default}.panel{background:#172234;border:1px solid #2a3b54;border-radius:14px;padding:24px;margin-bottom:20px}.muted{color:#aebbd0}.notice{border-left:3px solid #eec57e;padding:12px 16px;background:#282738}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}label{display:flex;flex-direction:column;gap:8px}textarea{width:100%;min-height:80px}audio{width:100%;margin:14px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.7}.scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}td,th{text-align:left;padding:12px;border-bottom:1px solid #32435c;white-space:nowrap}th{color:#9bacbf}.badge{display:inline-block;border-radius:6px;padding:4px 8px;background:#2b3c55;color:#cbd8ec;font-size:12px}.error{color:#ffb4a8}[hidden]{display:none!important}#status{min-height:24px;color:#74e4c3}small{color:#aebbd0}
+</style>
+<main>
+<div class="eyebrow">LOCAL CONVERSATION · EVALUATION WORKSPACE</div>
+<h1>llm-communication_codex</h1>
+<p>같은 문장으로 비교하고, 직접 듣고, 측정 근거를 남기세요.</p>
+<div class="toolbar"><button id="listenTab" class="active">블라인드 평가</button><button id="resultsTab">측정 결과 · 모델명 공개</button></div>
+<section id="listen">
+<div class="notice">청취를 마칠 때까지 측정 결과 탭을 열지 않는 것을 권장합니다. 평점은 1점(매우 부족)부터 5점(매우 좋음)까지입니다.</div>
+<div class="toolbar"><label>평가자 ID<input id="reviewer" placeholder="예: listener-01" maxlength="80"></label><label>문장 필터<select id="caseFilter"><option value="">전체 문장</option></select></label><label>샘플<select id="sampleSelect"></select></label></div>
+<article class="panel"><span id="badge" class="badge"></span><h2 id="label"></h2><p id="category"></p><h3>입력 / 정답 전사</h3><pre id="inputText"></pre><h3 id="outputHeading">응답 / 인식 결과</h3><pre id="outputText"></pre><audio id="audio" controls preload="none"></audio><p id="demoNotice" class="notice" hidden>DEMO · 이 소리는 모델 음성이 아닌 테스트용 톤입니다. 품질 평가는 저장할 수 없습니다.</p></article>
+<form id="ratingForm" class="panel"><h2>직접 평가</h2><div class="grid" id="scores"></div><p><label>관찰 내용<textarea id="notes" maxlength="2000" placeholder="어색한 억양, 생략된 단어, 좋았던 표현을 기록하세요."></textarea></label></p><button class="primary" id="save">평가 저장</button> <button type="button" id="next">다음 샘플</button><p id="status" role="status"></p><small>같은 평가자·샘플을 다시 평가하면 보고서에는 마지막 평점을 반영합니다.</small></form>
+</section>
+<section id="results" hidden><div class="notice">음성 파일 완성 시간은 스피커에서 첫 소리가 들리는 시간과 다릅니다. DEMO 수치는 모델 선정에 사용하지 마세요.</div><div class="panel"><h2>실험별 측정</h2><div class="scroll"><table><thead><tr><th>실험</th><th>구분</th><th>성공 / 전체</th><th>실패율</th><th>중앙값 ms</th><th>p95 ms</th><th>RTF 중앙값</th></tr></thead><tbody id="rows"></tbody></table></div></div><div class="panel"><h2>청취 평가 집계</h2><pre id="quality"></pre></div><p>전체 지표·원본 결과·설정은 실행 폴더의 summary.json, samples.csv, manifest.json에서 확인할 수 있습니다.</p></section>
+</main>
+<script>
+const $=id=>document.getElementById(id);let samples=[],filtered=[];
+const dimensions={naturalness:'자연스러움',pronunciation:'발음 정확도',prosody:'억양·쉼·감정',content:'응답·인식 내용 적절성'};
+for(const [id,name] of Object.entries(dimensions)){const label=document.createElement('label');label.textContent=name;const select=document.createElement('select');select.id=id;select.add(new Option('평가하지 않음',''));for(let i=1;i<=5;i++)select.add(new Option(`${i}점`,i));label.append(select);$('scores').append(label)}
+async function api(path,body){const response=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});const data=await response.json();if(!response.ok)throw new Error(data.error||'요청 실패');return data}
+function selected(){return filtered.find(s=>s.id===$('sampleSelect').value)}
+function show(){const s=selected();$('audio').pause();$('status').textContent='';$('notes').value='';Object.keys(dimensions).forEach(d=>$(d).value='');if(!s){$('label').textContent='성공한 샘플이 없습니다. 결과 탭과 실행 로그를 확인하세요.';$('save').disabled=true;$('audio').hidden=true;return}$('label').textContent=s.label;$('badge').textContent=s.synthetic?'DEMO':'모델명 비공개';$('category').textContent=`${s.case} · ${s.category}`;$('inputText').textContent=s.input;$('outputText').textContent=s.text;$('outputHeading').hidden=!s.text;$('audio').hidden=!s.audio;if(s.audio)$('audio').src='/audio/'+s.id;else $('audio').removeAttribute('src');$('demoNotice').hidden=!s.synthetic;$('save').disabled=s.synthetic}
+function filter(){filtered=samples.filter(s=>!$('caseFilter').value||s.case===$('caseFilter').value);$('sampleSelect').replaceChildren(...filtered.map(s=>new Option(s.label,s.id)));show()}
+$('caseFilter').onchange=filter;$('sampleSelect').onchange=show;$('next').onclick=()=>{if(filtered.length){$('sampleSelect').selectedIndex=($('sampleSelect').selectedIndex+1)%filtered.length;show()}};
+$('ratingForm').onsubmit=async e=>{e.preventDefault();try{const scores={};for(const d of Object.keys(dimensions))if($(d).value)scores[d]=Number($(d).value);await api('/api/review',{id:selected().id,reviewer:$('reviewer').value,scores,notes:$('notes').value});$('status').textContent='저장했습니다.'}catch(err){$('status').textContent=err.message}};
+function tab(results){$('results').hidden=!results;$('listen').hidden=results;$('listenTab').classList.toggle('active',!results);$('resultsTab').classList.toggle('active',results);$('audio').pause()}
+$('listenTab').onclick=()=>tab(false);
+$('resultsTab').onclick=async()=>{tab(true);try{const data=await api('/api/summary');$('rows').replaceChildren();const fmt=v=>typeof v==='number'?v.toFixed(2):'—';for(const e of data.experiments){const timing=e.metrics.pipeline_total_ms||e.metrics.request_ms||{};const values=[e.experiment,(e.synthetic?'DEMO / ':'')+e.phase,`${e.succeeded} / ${e.attempted}`,`${(100*e.failure_rate).toFixed(1)}%`,fmt(timing.median),fmt(timing.p95),fmt((e.metrics.rtf||e.metrics['tts.rtf']||{}).median)];const tr=document.createElement('tr');for(const value of values){const td=document.createElement('td');td.textContent=value;tr.append(td)}$('rows').append(tr)}$('quality').textContent=Object.keys(data.human_ratings).length?JSON.stringify(data.human_ratings,null,2):'아직 저장된 실제 모델 평가가 없습니다.'}catch(err){$('quality').textContent=err.message}};
+(async()=>{try{samples=await api('/api/listen');for(const c of [...new Set(samples.map(s=>s.case))])$('caseFilter').add(new Option(c,c));filter()}catch(err){$('label').textContent=err.message}})();
+</script>
+</html>

@@ -1,0 +1,12 @@
+{"id":"greeting","category":"일상","text":"안녕하세요. 오늘 하루는 어땠어요?"}
+{"id":"empathy","category":"공감","text":"많이 지치셨겠어요. 잠깐 쉬었다가 천천히 이야기해도 괜찮아요."}
+{"id":"surprise","category":"감정","text":"정말요? 와, 그건 생각도 못 했는데요!"}
+{"id":"question","category":"질문","text":"지금 출발할까요, 아니면 비가 그칠 때까지 기다릴까요?"}
+{"id":"correction","category":"정정","text":"아, 제가 잘못 들었네요. 목요일이 아니라 금요일 오후 세 시죠?"}
+{"id":"numbers","category":"숫자","text":"예약은 9월 15일 오후 3시 20분이고, 결제 금액은 12,500원이에요."}
+{"id":"mixed","category":"영어혼용","text":"GPU 메모리가 부족하면 TTS를 CPU에서 실행해 볼 수 있어요."}
+{"id":"short","category":"짧은발화","text":"네, 좋아요."}
+{"id":"pause","category":"쉼","text":"음, 잠깐만요. 그 부분은 다시 확인해 볼게요."}
+{"id":"pronunciation","category":"받침","text":"책을 읽다가 창밖을 봤는데, 꽃잎이 바람에 흩날리고 있었어요."}
+{"id":"long","category":"긴문장","text":"오늘은 먼저 필요한 재료를 확인하고, 가까운 가게에서 장을 본 다음 저녁을 준비하면 좋겠어요. 시간이 부족하면 간단한 메뉴로 바꿔도 괜찮고요. 먹고 싶은 음식이 있다면 그걸 기준으로 정해 봐요."}
+{"id":"polite","category":"말투","text":"알려 주셔서 고마워요. 말씀하신 내용을 반영해서 다시 정리해 볼게요."}

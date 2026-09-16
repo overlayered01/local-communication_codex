@@ -1,0 +1,234 @@
+{
+  "schema_version": 1,
+  "root": "..",
+  "seed": 42,
+  "warmups": 1,
+  "repetitions": 3,
+  "allow_remote": false,
+  "providers": {
+    "supertonic-5": {
+      "kind": "tts",
+      "adapter": "worker",
+      "engine": "supertonic",
+      "command": [
+        "{root}/.venv-supertonic/Scripts/python.exe",
+        "{root}/scripts/model_worker.py"
+      ],
+      "timeout_s": 300,
+      "model": "supertone-oss-archive/supertonic-3",
+      "revision": "aafc6e32416a594460b32413efc49d7fe4ce6d46",
+      "voice": "F1",
+      "load": {
+        "model_dir": "{root}/models/supertonic-3",
+        "auto_download": false
+      },
+      "params": {
+        "lang": "ko",
+        "total_steps": 5,
+        "speed": 1
+      }
+    },
+    "supertonic-8": {
+      "kind": "tts",
+      "adapter": "worker",
+      "engine": "supertonic",
+      "command": [
+        "{root}/.venv-supertonic/Scripts/python.exe",
+        "{root}/scripts/model_worker.py"
+      ],
+      "timeout_s": 300,
+      "model": "supertone-oss-archive/supertonic-3",
+      "revision": "aafc6e32416a594460b32413efc49d7fe4ce6d46",
+      "voice": "F1",
+      "load": {
+        "model_dir": "{root}/models/supertonic-3",
+        "auto_download": false
+      },
+      "params": {
+        "lang": "ko",
+        "total_steps": 8,
+        "speed": 1
+      }
+    },
+    "supertonic-12": {
+      "kind": "tts",
+      "adapter": "worker",
+      "engine": "supertonic",
+      "command": [
+        "{root}/.venv-supertonic/Scripts/python.exe",
+        "{root}/scripts/model_worker.py"
+      ],
+      "timeout_s": 300,
+      "model": "supertone-oss-archive/supertonic-3",
+      "revision": "aafc6e32416a594460b32413efc49d7fe4ce6d46",
+      "voice": "F1",
+      "load": {
+        "model_dir": "{root}/models/supertonic-3",
+        "auto_download": false
+      },
+      "params": {
+        "lang": "ko",
+        "total_steps": 12,
+        "speed": 1
+      }
+    },
+    "qwen-06": {
+      "kind": "tts",
+      "adapter": "worker",
+      "engine": "qwen_tts",
+      "command": [
+        "{root}/.venv-qwen/Scripts/python.exe",
+        "{root}/scripts/model_worker.py"
+      ],
+      "timeout_s": 300,
+      "model": "{root}/models/Qwen3-TTS-12Hz-0.6B-CustomVoice",
+      "load": {
+        "device_map": "cuda:0",
+        "dtype": "bfloat16",
+        "attn_implementation": "sdpa",
+        "local_files_only": true
+      },
+      "params": {
+        "language": "Korean",
+        "speaker": "Sohee"
+      }
+    },
+    "qwen-17": {
+      "kind": "tts",
+      "adapter": "worker",
+      "engine": "qwen_tts",
+      "command": [
+        "{root}/.venv-qwen/Scripts/python.exe",
+        "{root}/scripts/model_worker.py"
+      ],
+      "timeout_s": 300,
+      "model": "{root}/models/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+      "load": {
+        "device_map": "cuda:0",
+        "dtype": "bfloat16",
+        "attn_implementation": "sdpa",
+        "local_files_only": true
+      },
+      "params": {
+        "language": "Korean",
+        "speaker": "Sohee",
+        "instruct": "차분하고 친근한 일상 대화 말투로, 감정을 과장하지 않고 자연스럽게 말하세요."
+      }
+    },
+    "qwen35-4b": {
+      "kind": "llm",
+      "adapter": "ollama",
+      "url": "http://127.0.0.1:11434/api/chat",
+      "model": "qwen3.5:4b",
+      "system": "한국어 존댓말로 자연스럽게 대화하세요. 일상 대화는 한두 문장으로 답하고, 설명을 요청하면 자세히 답하세요. 불필요하게 질문으로 끝내지 마세요.",
+      "params": {
+        "think": false,
+        "keep_alive": -1,
+        "options": {
+          "temperature": 0.5,
+          "seed": 42,
+          "num_ctx": 4096,
+          "num_predict": 160
+        }
+      },
+      "unload_after": true
+    },
+    "qwen35-9b": {
+      "kind": "llm",
+      "adapter": "ollama",
+      "url": "http://127.0.0.1:11434/api/chat",
+      "model": "qwen3.5:9b",
+      "system": "한국어 존댓말로 자연스럽게 대화하세요. 일상 대화는 한두 문장으로 답하고, 설명을 요청하면 자세히 답하세요. 불필요하게 질문으로 끝내지 마세요.",
+      "params": {
+        "think": false,
+        "keep_alive": -1,
+        "options": {
+          "temperature": 0.5,
+          "seed": 42,
+          "num_ctx": 4096,
+          "num_predict": 160
+        }
+      },
+      "unload_after": true
+    },
+    "lmstudio": {
+      "kind": "llm",
+      "adapter": "chat_sse",
+      "url": "http://127.0.0.1:1234/v1/chat/completions",
+      "model": "REPLACE_WITH_LOADED_MODEL_ID",
+      "params": {
+        "temperature": 0.5,
+        "max_tokens": 160
+      }
+    },
+    "tts-server": {
+      "kind": "tts",
+      "adapter": "tts_http",
+      "url": "http://127.0.0.1:7788/v1/audio/speech",
+      "model": "supertonic-3",
+      "params": {
+        "voice": "F1",
+        "lang": "ko",
+        "steps": 8
+      }
+    }
+  },
+  "experiments": [
+    {
+      "id": "supertonic-5",
+      "mode": "tts",
+      "tts": "supertonic-5",
+      "dataset": "datasets/ko-tts.jsonl"
+    },
+    {
+      "id": "supertonic-8",
+      "mode": "tts",
+      "tts": "supertonic-8",
+      "dataset": "datasets/ko-tts.jsonl"
+    },
+    {
+      "id": "supertonic-12",
+      "mode": "tts",
+      "tts": "supertonic-12",
+      "dataset": "datasets/ko-tts.jsonl"
+    },
+    {
+      "id": "qwen-06",
+      "mode": "tts",
+      "tts": "qwen-06",
+      "dataset": "datasets/ko-tts.jsonl"
+    },
+    {
+      "id": "qwen-17",
+      "mode": "tts",
+      "tts": "qwen-17",
+      "dataset": "datasets/ko-tts.jsonl"
+    },
+    {
+      "id": "qwen35-4b",
+      "mode": "llm",
+      "llm": "qwen35-4b",
+      "dataset": "datasets/ko-chat.jsonl"
+    },
+    {
+      "id": "qwen35-9b",
+      "mode": "llm",
+      "llm": "qwen35-9b",
+      "dataset": "datasets/ko-chat.jsonl"
+    },
+    {
+      "id": "pipeline-4b-supertonic-8",
+      "mode": "pipeline",
+      "llm": "qwen35-4b",
+      "tts": "supertonic-8",
+      "dataset": "datasets/ko-chat.jsonl"
+    },
+    {
+      "id": "pipeline-4b-qwen-17",
+      "mode": "pipeline",
+      "llm": "qwen35-4b",
+      "tts": "qwen-17",
+      "dataset": "datasets/ko-chat.jsonl"
+    }
+  ]
+}

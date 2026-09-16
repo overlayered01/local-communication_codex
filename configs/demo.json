@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "root": "..",
+  "seed": 42,
+  "warmups": 1,
+  "repetitions": 3,
+  "allow_remote": false,
+  "providers": {
+    "mock-chat": {
+      "kind": "llm",
+      "adapter": "mock"
+    },
+    "tone-a": {
+      "kind": "tts",
+      "adapter": "mock",
+      "frequency": 440
+    },
+    "tone-b": {
+      "kind": "tts",
+      "adapter": "mock",
+      "frequency": 660
+    }
+  },
+  "experiments": [
+    {
+      "id": "demo-tts-a",
+      "mode": "tts",
+      "tts": "tone-a",
+      "dataset": "datasets/ko-tts.jsonl"
+    },
+    {
+      "id": "demo-tts-b",
+      "mode": "tts",
+      "tts": "tone-b",
+      "dataset": "datasets/ko-tts.jsonl"
+    },
+    {
+      "id": "demo-chat",
+      "mode": "llm",
+      "llm": "mock-chat",
+      "dataset": "datasets/ko-chat.jsonl"
+    },
+    {
+      "id": "demo-pipeline",
+      "mode": "pipeline",
+      "llm": "mock-chat",
+      "tts": "tone-a",
+      "dataset": "datasets/ko-chat.jsonl"
+    }
+  ]
+}
