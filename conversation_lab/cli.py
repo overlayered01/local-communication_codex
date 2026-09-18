@@ -6,11 +6,15 @@ from .config import load_config
 from .report import build_report
 from .runner import hardware, run
 from .server import make_server
+from .playground import make_playground
 
 
 def main():
-    parser = argparse.ArgumentParser(description="llm-communication_codex — 로컬 대화 모델 비교")
+    parser = argparse.ArgumentParser(description="로컬 모델 플레이그라운드")
     sub = parser.add_subparsers(dest="command", required=True)
+    play = sub.add_parser("play", help="모델을 선택하고 대화·음성을 바로 테스트")
+    play.add_argument("--config", default="configs/local.json")
+    play.add_argument("--port", type=int, default=8766)
     sub.add_parser("doctor", help="현재 장비 정보 출력; 모델 설치 여부는 추론하지 않음")
     check = sub.add_parser("validate", help="설정과 데이터셋 검증")
     check.add_argument("config")
@@ -25,7 +29,14 @@ def main():
     serve.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
     try:
-        if args.command == "doctor":
+        if args.command == "play":
+            server = make_playground(args.config, args.port)
+            print(f"Open http://127.0.0.1:{server.server_port} (Ctrl+C to stop)", flush=True)
+            try:
+                server.serve_forever()
+            finally:
+                server.server_close()
+        elif args.command == "doctor":
             print(json.dumps(hardware(), ensure_ascii=False, indent=2))
         elif args.command == "validate":
             cfg, _ = load_config(args.config)

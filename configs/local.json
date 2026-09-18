@@ -171,6 +171,27 @@
         "lang": "ko",
         "steps": 8
       }
+    },
+    "whisper-small": {
+      "kind": "stt",
+      "adapter": "worker",
+      "engine": "faster_whisper",
+      "command": [
+        "{root}/.venv-whisper/Scripts/python.exe",
+        "{root}/scripts/model_worker.py"
+      ],
+      "timeout_s": 300,
+      "model": "{root}/models/faster-whisper-small",
+      "load": {
+        "device": "cpu",
+        "compute_type": "int8",
+        "local_files_only": true
+      },
+      "params": {
+        "language": "ko",
+        "beam_size": 5,
+        "vad_filter": true
+      }
     }
   },
   "experiments": [

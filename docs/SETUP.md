@@ -22,6 +22,7 @@ python -m conversation_lab run configs/local.json --only supertonic-5 supertonic
 ```powershell
 uv venv --python 3.12 .venv-qwen
 uv pip install --python .venv-qwen/Scripts/python.exe qwen-tts soundfile huggingface_hub
+uv pip install --python .venv-qwen/Scripts/python.exe torch==2.11.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128 --reinstall
 # 해당 GPU를 지원하는 PyTorch CUDA 빌드를 설치했는지 먼저 확인합니다.
 .venv-qwen/Scripts/python.exe -c "import torch; print(torch.__version__, torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CUDA unavailable')"
 .venv-qwen/Scripts/hf.exe download Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice --local-dir models/Qwen3-TTS-12Hz-0.6B-CustomVoice
@@ -60,6 +61,8 @@ uv venv --python 3.12 .venv-whisper
 uv pip install --python .venv-whisper/Scripts/python.exe faster-whisper huggingface_hub
 .venv-whisper/Scripts/hf.exe download Systran/faster-whisper-small --local-dir models/faster-whisper-small
 ```
+
+플레이그라운드에서는 `configs/local.json`의 `whisper-small`을 사용합니다. `python -m conversation_lab play` 실행 후 **음성 대화** 탭에서 마이크로 녹음하면 STT → LLM → TTS를 실행합니다. 평가용 녹음 파일이나 정답 전사는 필요하지 않습니다. 아래 파일 기반 절차는 반복 평가용입니다.
 
 `datasets/recordings/recording-01.wav`에 실제 **PCM WAV**를 넣고 `datasets/ko-stt.example.jsonl`의 `reference`를 정확한 전사로 수정합니다. 예제 경로에 녹음이 없으면 검증이 실패하는 것이 정상입니다. 서로 다른 화자·소음·말하기 속도·실제 질문을 추가하세요.
 

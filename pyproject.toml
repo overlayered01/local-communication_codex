@@ -9,6 +9,9 @@ description = "Reproducible local STT, LLM and TTS evaluation lab"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+studio = ["pypdf>=6,<7"]
+
 [project.scripts]
 llm-communication_codex = "conversation_lab.cli:main"
 

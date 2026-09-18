@@ -20,14 +20,14 @@ def digest(path):
     return h.hexdigest()
 
 
-def load_config(path):
+def load_config(path, *, validate_experiments=True):
     path = Path(path).resolve()
     cfg = read_json(path)
     if cfg.get("schema_version") != 1:
         raise ValueError("schema_version must be 1")
     root = (path.parent / cfg.get("root", ".")).resolve()
     providers = cfg.get("providers", {})
-    if not providers or not cfg.get("experiments"):
+    if not providers or (validate_experiments and not cfg.get("experiments")):
         raise ValueError("providers and experiments are required")
     ids = set()
     for name, provider in providers.items():
@@ -50,6 +50,8 @@ def load_config(path):
                 raise ValueError(f"{name}: remote endpoints require allow_remote=true")
         if provider.get("timeout_s", 120) <= 0:
             raise ValueError("timeout_s must be positive")
+    if not validate_experiments:
+        return cfg, root
     for exp in cfg["experiments"]:
         eid = exp.get("id", "")
         if not re.fullmatch(r"[A-Za-z0-9_-]+", eid) or eid in ids:

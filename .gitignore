@@ -6,3 +6,4 @@ runs/
 .env
 dist/
 *.egg-info/
+.local/
