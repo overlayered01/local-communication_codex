@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-let mode = 'chat', models = [], history = [], busy = false, lastModel = '';
+let mode = 'voice', models = [], history = [], busy = false, lastModel = '';
 let recording = null, requestingMic = false;
 const engineName = engine => ({ollama:'Ollama', chat_sse:'LM Studio / 호환 서버', supertonic:'Supertonic', qwen_tts:'Qwen TTS', tts_http:'음성 서버', faster_whisper:'Whisper'}[engine] || engine);
 
@@ -10,11 +10,33 @@ async function api(path, body) {
   return data;
 }
 function status(text) { $('status').textContent = text; $('voiceStatus').textContent = text; }
+function flowStages() { return Object.fromEntries(['stt','llm','tts'].map(k=>[k,$('stage-'+k).checked])); }
+function setFlow(stages) {
+  for(const k of ['stt','llm','tts'])$('stage-'+k).checked=stages[k]===true;
+  syncFlow();
+}
+function syncFlow() {
+  const stages=flowStages();
+  for(const k of ['stt','llm','tts']) {
+    $(k+'Settings').hidden=!stages[k];
+    $('flow-'+k).classList.toggle('stage-off',!stages[k]);
+  }
+  $('form').hidden=stages.stt;$('recorder').hidden=!stages.stt;
+  $('conversationCommon').hidden=!stages.llm;$('autoplaySetting').hidden=!stages.tts;
+  $('flowSummary').textContent=[stages.stt?'마이크 → 음성 인식':'텍스트 입력',stages.llm?'LLM 답변':'입력 텍스트 그대로',stages.tts?'음성 생성 → 재생':'텍스트 결과'].join(' → ');
+  $('send').textContent='선택한 단계 실행 ↗';
+  $('promptLabel').textContent=stages.llm?'질문 / 메시지':'음성으로 만들 텍스트';
+  $('emptyTitle').textContent='음성 대화의 각 단계를 테스트하세요';
+  $('emptyDescription').textContent=stages.stt?'녹음을 끝내면 켜진 단계만 순서대로 실행합니다.':'텍스트를 입력하면 켜진 단계만 순서대로 실행합니다.';
+  document.querySelector('.chips').hidden=stages.stt;
+  try {localStorage.setItem('local-studio-flow-v1',JSON.stringify(stages));}catch(_){}
+  clear();ttsInfo();availability();
+}
 function availability() {
-  const ready = (mode === 'tts' || !!$('llm').value) && (mode === 'chat' || !!$('tts').value) && (mode !== 'voice' || !!$('stt').value);
-  $('send').disabled = busy || !ready;
-  $('record').disabled = busy || requestingMic || !ready;
-  if (!busy && !recording && !requestingMic) status(ready ? '준비됐습니다.' : '사용 가능한 모델이 없습니다. 서버 연결 또는 설치 상태를 확인하세요.');
+  const stages=flowStages();
+  const ready=Object.values(stages).some(Boolean)&&Object.entries(stages).every(([k,on])=>!on||!!$(k).value);
+  $('send').disabled=busy||!ready;$('record').disabled=busy||requestingMic||!ready;
+  if(!busy&&!recording&&!requestingMic)status(ready?'준비됐습니다.':Object.values(stages).some(Boolean)?'켜진 단계의 모델 연결을 확인하세요.':'실행할 단계를 하나 이상 켜세요.');
 }
 function ttsInfo() {
   const m = models.find(m => m.id === $('tts').value);
@@ -56,67 +78,70 @@ function stopPlayback() { document.querySelectorAll('audio').forEach(a => a.paus
 function clear() {
   stopPlayback(); history = [];
   $('results').querySelectorAll('.message').forEach(x => x.remove()); $('empty').hidden = false;
-  $('panelTitle').textContent = mode === 'tts' ? '음성 만들기' : mode === 'voice' ? '음성 대화' : '새 대화';
+  $('panelTitle').textContent = '음성 대화 · 실행 결과';
 }
 const lockedControls = '.tab,#refresh,#clear,#llm,#tts,#stt,#voice,#speed,#speaker,#temperature,#system,#prompt,.chip';
-function lockControls(value) { document.querySelectorAll(lockedControls+',.model-option,.reset-options,#openSettings,#applyPreset,#presetSelect,#ragEnabled,#ragCollection,#ragTopK,#previewSearch').forEach(el => el.disabled = value); }
+function lockControls(value) { document.querySelectorAll(lockedControls+',.feature-toggle,.model-option,.reset-options,#openRag,#openSettings,#applyPreset,#presetSelect,#ragEnabled,#ragCollection,#ragTopK,#previewSearch').forEach(el => el.disabled = value); }
 function setBusy(value) { busy = value; lockControls(value); availability(); }
 $('llm').onchange = () => { lastModel = $('llm').value; clear(); availability(); };
 $('tts').onchange = () => { ttsInfo(); availability(); };
 $('stt').onchange = availability;
 $('system').onchange = () => { clear(); availability(); };
 $('refresh').onclick = refresh; $('clear').onclick = clear;
-document.querySelectorAll('[data-mode]').forEach(button => button.onclick = () => {
-  if (busy || recording || requestingMic) return;
-  mode = button.dataset.mode;
-  document.querySelectorAll('[data-mode]').forEach(b => { b.classList.toggle('active', b === button); b.setAttribute('aria-pressed', b === button); });
-  $('llmSettings').hidden = mode === 'tts'; $('ttsSettings').hidden = mode === 'chat'; $('sttSettings').hidden = mode !== 'voice';
-  $('form').hidden = mode === 'voice'; $('recorder').hidden = mode !== 'voice';
-  $('emptyTitle').textContent = {tts:'어떤 문장을 읽어드릴까요?', pipeline:'답변을 목소리로 들어보세요.', voice:'말하면, 목소리로 답합니다.', chat:'어떤 이야기를 해볼까요?'}[mode];
-  $('emptyDescription').textContent = mode === 'voice' ? '녹음을 끝내면 음성 인식 → 답변 → 음성 재생까지 이어집니다.' : mode === 'tts' ? '음성 모델과 목소리를 선택하고 문장을 입력하세요.' : '왼쪽에서 모델을 선택하고 메시지를 보내세요.';
-  document.querySelector('.chips').hidden = mode === 'voice';
-  $('promptLabel').textContent = mode === 'tts' ? '읽을 문장' : '메시지';
-  $('send').textContent = mode === 'tts' ? '음성 생성 ↗' : mode === 'pipeline' ? '대화 + 음성 ↗' : '보내기 ↗';
-    clear(); ttsInfo(); availability();
-});
+for(const k of ['stt','llm','tts'])$('stage-'+k).onchange=syncFlow;
+try {const stored=JSON.parse(localStorage.getItem('local-studio-flow-v1'));if(stored&&['stt','llm','tts'].every(k=>typeof stored[k]==='boolean'))setFlow(stored);else syncFlow();}catch(_){syncFlow();}
+
 document.querySelectorAll('[data-prompt]').forEach(b => b.onclick = () => { $('prompt').value = b.dataset.prompt; $('prompt').focus(); });
 
+function renderTrace(box,job) {
+  const body=box.querySelector('.body');
+  for(const k of ['stt','llm','tts']) {
+    let details=body.querySelector(`[data-stage="${k}"]`);
+    if(!details){details=document.createElement('details');details.dataset.stage=k;details.open=true;details.append(document.createElement('summary'),document.createElement('pre'));body.append(details);}
+    const t=job.stages?.[k]||{status:flowStages()[k]?'queued':'skipped'};
+    details.querySelector('summary').textContent=`${{stt:'음성 인식',llm:'LLM 답변',tts:'음성 생성'}[k]} · ${{queued:'대기',running:'실행 중',done:'완료',skipped:'꺼짐 · 건너뜀',error:'실패',blocked:'앞 단계 실패로 중단'}[t.status]}${t.elapsed_ms!==undefined?' · '+(t.elapsed_ms/1000).toFixed(2)+'초':''}`;
+    details.querySelector('pre').textContent=[t.input!==undefined?'입력: '+t.input:'',t.output!==undefined?'출력: '+t.output:'',t.error||''].filter(Boolean).join('\n');
+  }
+}
 async function generate(text, audioBase64 = null) {
   if (busy) return;
+  const stages=flowStages();
   stopPlayback(); setBusy(true); status('요청을 보내고 있습니다…');
-  const userBox = addMessage('나', mode === 'voice' ? '녹음한 내용을 인식하고 있습니다…' : text, 'user');
-  const model = models.find(m => m.id === $(mode === 'tts' ? 'tts' : 'llm').value);
+  const userBox = addMessage('나', stages.stt ? '녹음한 내용을 인식하고 있습니다…' : text, 'user');
+  const model = models.find(m => m.id === $(stages.llm ? 'llm' : stages.tts ? 'tts' : 'stt').value);
   let replyBox = null, transcript = text;
   try {
-    const request = {mode, text, llm:$('llm').value, tts:$('tts').value, stt:$('stt').value,
-      messages:mode === 'tts' ? [] : history.slice(-40), system:$('system').value,
+    const request = {mode, stages, text, llm:$('llm').value, tts:$('tts').value, stt:$('stt').value,
+      messages:!stages.llm || window.studioHistory?.() === false ? [] : history.slice(-40), system:$('system').value,
       temperature:Number($('temperature').value), voice:$('voice').value, speed:Number($('speed').value), speaker:$('speaker').value};
     if (window.studioRequest) Object.assign(request, window.studioRequest());
     if (audioBase64) request.audio_base64 = audioBase64;
     const {id} = await api('/api/generate', request);
+    const traceBox=addMessage('단계별 실행 상태','');
     let job;
     do {
       await new Promise(resolve => setTimeout(resolve, 350));
       job = await api('/api/jobs/' + id); status(job.phase || '실행 중…');
       if (job.transcript) { transcript = job.transcript; userBox.querySelector('.body').textContent = transcript; }
-      if (job.text && !replyBox) replyBox = addMessage(model.label, job.text);
+      renderTrace(traceBox,job);
     } while (job.status === 'running');
     if (job.status === 'error') throw Error(job.error);
     replyBox ||= addMessage(model.label, job.text || text);
     if (window.studioResult) window.studioResult(replyBox, job);
     if (job.audio) {
-      const audio = document.createElement('audio'); audio.controls = true; audio.autoplay = true; audio.src = job.audio;
+      const autoplay = window.studioAutoplay?.() !== false;
+      const audio = document.createElement('audio'); audio.controls = true; audio.autoplay = autoplay; audio.src = job.audio;
       const link = document.createElement('a'); link.href = job.audio; link.download = 'speech-' + id + '.wav'; link.className = 'download'; link.textContent = 'WAV 다운로드';
       replyBox.append(audio, link);
-      try { await audio.play(); }
+      try { if(autoplay) await audio.play(); }
       catch (_) { const note = document.createElement('p'); note.className = 'small'; note.textContent = '브라우저가 자동 재생을 차단했습니다. 위 재생 버튼을 눌러주세요.'; replyBox.append(note); }
     }
     const timing = document.createElement('div'); timing.className = 'small'; timing.textContent = `완료까지 ${(job.elapsed_ms / 1000).toFixed(2)}초 (로딩 포함)`; replyBox.append(timing);
-    if (mode !== 'tts') history.push({role:'user', content:transcript}, {role:'assistant', content:job.text});
+    if (stages.llm) history.push({role:'user', content:transcript}, {role:'assistant', content:job.text});
     $('prompt').value = ''; $('panelTitle').textContent = model.label;
     $('results').scrollTop = $('results').scrollHeight;
   } catch (e) { addMessage('실행 오류', e.message, 'error'); }
-  finally { setBusy(false); if (mode !== 'voice') $('prompt').focus(); }
+  finally { setBusy(false); if (!stages.stt) $('prompt').focus(); }
 }
 $('form').onsubmit = e => { e.preventDefault(); const text = $('prompt').value.trim(); if (text && !busy) generate(text); };
 $('prompt').placeholder = 'Enter로 전송 · Shift+Enter 또는 Ctrl+Enter로 줄바꿈';

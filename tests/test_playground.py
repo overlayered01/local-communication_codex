@@ -28,7 +28,7 @@ class PlaygroundTests(unittest.TestCase):
             def do_GET(self):
                 self.send_response(200)
                 self.end_headers()
-                self.wfile.write(b'{"models":[{"name":"test-model"},{"name":"nomic-embed-text"}]}')
+                self.wfile.write(b'{"models":[{"name":"test-model"},{"name":"nomic-embed-text"},{"name":"bge-m3:latest"}]}')
 
             def do_POST(self):
                 received.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
@@ -87,6 +87,47 @@ class PlaygroundTests(unittest.TestCase):
         with self.request(job["audio"]) as response:
             with wave.open(io.BytesIO(response.read())) as audio:
                 self.assertGreater(audio.getnframes(), 0)
+
+    def test_selectable_stages_route_outputs_and_report_skipped_stages(self):
+        app = self.server.app
+        app.discover()
+        llm = next(iter(app.models))
+        app.models['stt'] = {'kind':'stt','ready':True,'config':{'kind':'stt','adapter':'mock'}}
+        app.models['tts'] = {'kind':'tts','ready':True,'config':{'kind':'tts','adapter':'mock'}}
+        audio = io.BytesIO()
+        with wave.open(audio,'wb') as wav:
+            wav.setparams((1,2,16000,0,'NONE','not compressed'))
+            wav.writeframes(b'\0\0'*16000)
+
+        class Recognizer:
+            def start(self): pass
+            def close(self): pass
+            def run(self, case, output): return {'text':'Recognized speech'}
+
+        def provider(cfg, root, log):
+            return Recognizer() if cfg['kind']=='stt' else create_provider(cfg,root,log)
+
+        with patch('conversation_lab.playground.create_provider',side_effect=provider):
+            for mask in range(1,8):
+                stages={s:bool(mask & (1<<i)) for i,s in enumerate(('stt','llm','tts'))}
+                with self.subTest(stages=stages):
+                    key=app.submit({'stages':stages,'text':'Typed input','llm':llm,'tts':'tts','stt':'stt',
+                        'audio_base64':base64.b64encode(audio.getvalue()).decode()})['id']
+                    for _ in range(200):
+                        if app.jobs[key]['status']!='running': break
+                        time.sleep(.01)
+                    job=app.jobs[key]
+                    self.assertEqual(job['status'],'done',job)
+                    self.assertEqual(set(job['settings']),{s for s,on in stages.items() if on})
+                    self.assertEqual('audio' in job,stages['tts'])
+                    expected='Hello' if stages['llm'] else 'Recognized speech' if stages['stt'] else 'Typed input'
+                    self.assertEqual(job['text'],expected)
+                    for s,on in stages.items():
+                        self.assertEqual(job['stages'][s]['status'],'done' if on else 'skipped')
+                    if stages['tts']: self.assertEqual(job['stages']['tts']['input'],expected)
+                    if stages['llm']: self.assertEqual(job['stages']['llm']['input'],'Recognized speech' if stages['stt'] else 'Typed input')
+        for stages in ({'stt':False,'llm':False,'tts':False},{'stt':1,'llm':True,'tts':False},{'llm':True}):
+            with self.assertRaises(ValueError): app.submit({'stages':stages,'text':'Hi'})
 
     def test_reject_cross_origin_unknown_model_and_concurrent_request(self):
         with self.assertRaises(urllib.error.HTTPError) as error:

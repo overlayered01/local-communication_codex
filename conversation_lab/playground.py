@@ -69,13 +69,15 @@ class Playground:
                 with opener.open(urllib.request.Request(list_url, headers=headers), timeout=3) as response:
                     result = json.load(response)
                 names = [m["name"] for m in result["models"]] if adapter == "ollama" else [m["id"] for m in result["data"]]
+                def embedding_model(name):
+                    return 'embed' in name.lower() or name.lower().split(':')[0].split('/')[-1] == 'bge-m3'
                 for name in names:
-                    if 'embed' in name.lower():
+                    if embedding_model(name):
                         key = 'embed-' + hashlib.sha256((endpoint+name).encode()).hexdigest()[:16]
                         embed_url = endpoint.rsplit('/',1)[0]+'/embed' if adapter == 'ollama' else endpoint.rsplit('/chat/completions',1)[0]+'/embeddings'
                         embedders[key] = dict(adapter=adapter,url=embed_url,model=name,api_key_env=base.get('api_key_env'))
                 # Model-list endpoints may include embedding-only models, which cannot chat.
-                names = [name for name in names if "embed" not in name.lower()]
+                names = [name for name in names if not embedding_model(name)]
                 for name in names:
                     cfg = copy.deepcopy(base)
                     cfg.update(model=name, unload_after=False, timeout_s=300)
@@ -102,10 +104,19 @@ class Playground:
         if not isinstance(data, dict):
             raise ValueError("요청 형식이 올바르지 않습니다")
         mode, text = data.get("mode"), data.get("text", "")
-        if mode not in {"chat", "tts", "pipeline", "voice"} or not isinstance(text, str) or (mode != "voice" and not 0 < len(text.strip()) <= 8000):
+        selected = data.get('stages')
+        if selected is not None:
+            if not isinstance(selected, dict) or set(selected) != {'stt','llm','tts'} or any(type(v) is not bool for v in selected.values()) or not any(selected.values()):
+                raise ValueError('STT·LLM·TTS 중 실행할 단계를 하나 이상 선택하세요')
+            stages = [s for s in ('stt','llm','tts') if selected[s]]
+        else:
+            if mode not in {'chat','tts','pipeline','voice'}:
+                raise ValueError('지원하지 않는 모드입니다')
+            stages = ["stt", "llm", "tts"] if mode == "voice" else ["llm", "tts"] if mode == "pipeline" else ["llm" if mode == "chat" else "tts"]
+        if not isinstance(text, str) or ('stt' not in stages and not 0 < len(text.strip()) <= 8000):
             raise ValueError("모드와 1~8,000자의 입력이 필요합니다")
         audio_bytes = None
-        if mode == "voice":
+        if 'stt' in stages:
             try:
                 encoded = data.get("audio_base64", "")
                 if not isinstance(encoded, str) or len(encoded) > 8_000_000:
@@ -126,7 +137,6 @@ class Playground:
         for m in messages:
             if not isinstance(m, dict) or m.get("role") not in {"user", "assistant"} or not isinstance(m.get("content"), str) or len(m["content"]) > 8000:
                 raise ValueError("대화 이력 형식이 올바르지 않습니다")
-        stages = ["stt", "llm", "tts"] if mode == "voice" else ["llm", "tts"] if mode == "pipeline" else ["llm" if mode == "chat" else "tts"]
         configs = {}
         with self.lock:
             for stage in stages:
@@ -187,6 +197,8 @@ class Playground:
     def _run(self, job_id, text, messages, configs, audio_bytes=None, rag=None):
         started = time.perf_counter()
         result = {"text": "", "timings": {}, 'settings':public_settings(configs), 'rag':rag or {'enabled':False}, 'sources':[]}
+        result['stages'] = {s:{'status':'queued' if s in configs else 'skipped'} for s in ('stt','llm','tts')}
+        stage = None
         try:
             if audio_bytes is not None:
                 (self.folder / (job_id + "-input.wav")).write_bytes(audio_bytes)
@@ -194,6 +206,10 @@ class Playground:
                 self.worker.close()
                 self.worker, self.worker_config = None, None
             for stage, cfg in configs.items():
+                trace = result['stages'][stage]
+                trace.update(status='running', input='녹음 WAV' if stage == 'stt' else text)
+                with self.lock:
+                    self.jobs[job_id].update(copy.deepcopy(result))
                 if stage == 'llm' and rag and rag['enabled']:
                     with self.lock:
                         self.jobs[job_id]['phase'] = '문서에서 관련 내용을 찾는 중'
@@ -227,6 +243,7 @@ class Playground:
                         result["transcript"] = text
                     else:
                         input_text = re.sub(r'\[\d+\]','',text) if stage == 'tts' and rag and rag['enabled'] else text
+                        trace['input'] = input_text
                         value = stage_run(provider, stage, {"text": input_text, "messages": messages}, output)
                     result["timings"][stage] = value["metrics"]["request_ms"]
                     if stage == "llm":
@@ -234,6 +251,8 @@ class Playground:
                         result["text"] = text
                     elif stage == "tts":
                         result["audio"] = "/audio/" + job_id
+                    trace.update(status='done', output=result.get('audio') if stage == 'tts' else text, elapsed_ms=result['timings'][stage])
+                    result['text'] = text
                     with self.lock:
                         self.jobs[job_id].update(copy.deepcopy(result))
                 finally:
@@ -243,6 +262,11 @@ class Playground:
             with self.lock:
                 self.jobs[job_id].update(status="done", phase="완료", **result)
         except Exception as exc:
+            if stage:
+                result['stages'][stage].update(status='error', error=str(exc))
+            for trace in result['stages'].values():
+                if trace['status'] == 'queued':
+                    trace['status'] = 'blocked'
             if self.worker:
                 self.worker.close()
                 self.worker, self.worker_config = None, None

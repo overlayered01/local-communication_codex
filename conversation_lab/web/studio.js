@@ -3,6 +3,20 @@
   let saved = {}, library = {presets:[],collections:[],embeddings:[]}, active = {}, initialized = false;
   try { saved = JSON.parse(localStorage.getItem(storageKey) || '{}'); } catch (_) {}
   if (!saved || typeof saved !== 'object' || Array.isArray(saved)) saved = {};
+  let common = {};
+  try { common = JSON.parse(localStorage.getItem('local-studio-common-v1') || '{}') || {}; } catch (_) {}
+  function saveCommon() {
+    common={system:$('system').value,systemEnabled:$('systemEnabled').checked,historyEnabled:$('historyEnabled').checked,autoplayEnabled:$('autoplayEnabled').checked};
+    try { localStorage.setItem('local-studio-common-v1',JSON.stringify(common)); } catch (_) {}
+  }
+  function syncCommon() {
+    $('systemFields').disabled=!$('systemEnabled').checked;
+    $('ragFields').disabled=!$('ragEnabled').checked;
+    $('conversationCommon').hidden=!flowStages().llm;
+    $('autoplaySetting').hidden=!flowStages().tts;
+  }
+  window.studioAutoplay=()=>$('autoplayEnabled').checked;
+  window.studioHistory=()=>$('historyEnabled').checked;
   function persist() { try { localStorage.setItem(storageKey,JSON.stringify(saved)); } catch (_) {} }
   function model(kind) { return models.find(m => m.id === $(kind).value); }
   function readOptions(kind) {
@@ -14,7 +28,7 @@
   }
   function remember(kind) {
     const key = active[kind]; if (!key) return;
-    saved[key] = {options:readOptions(kind), ...(kind === 'llm' ? {system:$('system').value} : {})};
+    saved[key] = {...saved[key],options:readOptions(kind),enabled:$(kind+'OptionsEnabled')?.checked ?? true};
     persist();
   }
   function render(kind) {
@@ -22,7 +36,14 @@
     if (!holder) { holder = document.createElement('section'); holder.id = kind+'Options'; $(kind+'Settings').append(holder); }
     holder.replaceChildren();
     const m = model(kind); active[kind] = m?.id || ''; if (!m) return;
-    if (kind === 'llm') $('system').value = saved[m.id]?.system ?? '한국어로 자연스럽고 간결하게 답하세요.';
+    if(kind==='llm' && common.system===undefined){$('system').value=saved[m.id]?.system ?? $('system').value;saveCommon();}
+    const switchLabel=document.createElement('label');switchLabel.className='setting-switch';
+    const toggle=document.createElement('input');toggle.type='checkbox';toggle.id=kind+'OptionsEnabled';toggle.className='feature-toggle';toggle.checked=saved[m.id]?.enabled!==false;
+    switchLabel.append(toggle,document.createTextNode('모델별 세부 설정 사용'));
+    const fields=document.createElement('fieldset');fields.className='settings-fields';fields.disabled=!toggle.checked;
+    const hint=document.createElement('p');hint.className='small';hint.textContent='끄면 기본 설정으로 실행합니다. 입력한 값은 보관됩니다.';
+    holder.append(switchLabel,hint,fields);
+    toggle.onchange=()=>{fields.disabled=!toggle.checked;remember(kind);if(kind==='llm')clear();};
     const normal = document.createElement('div'); normal.className = 'option-grid';
     const advanced = document.createElement('details'); const summary = document.createElement('summary'); summary.textContent = '고급 옵션'; advanced.append(summary);
     const extra = document.createElement('div'); extra.className = 'option-grid'; advanced.append(extra);
@@ -46,7 +67,7 @@
         input.addEventListener('input',update); update(); label.append(output);
       }
     }
-    holder.append(normal); if (extra.children.length) holder.append(advanced);
+    fields.append(normal); if (extra.children.length) fields.append(advanced);
     const styleField = m.options?.find(f => f.key === 'style');
     if (styleField) {
       const note = document.createElement('p'); note.className = 'small';
@@ -59,11 +80,11 @@
         content.textContent = preset ? preset+' '+intensity.instructions[values.intensity]+(values.instruct.trim()?'\n추가 지시 (충돌하는 내용은 이 지시를 우선하세요): '+values.instruct.trim():'') : values.instruct || '추가 말투 지시 없음';
       };
       normal.addEventListener('input',update); normal.addEventListener('change',update);
-      holder.append(note,preview); update();
+      fields.append(note,preview); update();
     }
     const reset = document.createElement('button'); reset.className = 'secondary reset-options'; reset.textContent = '모델 옵션 기본값 복원'; reset.style.marginTop = '12px';
     reset.onclick = () => { saved[m.id] = {...saved[m.id],options:{}}; render(kind); remember(kind); };
-    if (m.options?.length) holder.append(reset);
+    if (m.options?.length) fields.append(reset);
   }
   function sourcesView(container,sources) {
     container.replaceChildren();
@@ -73,7 +94,8 @@
   function ragSettings() { return {enabled:$('ragEnabled').checked,collection:$('ragCollection').value,top_k:Number($('ragTopK').value)}; }
   function capture() {
     for (const kind of ['llm','tts','stt']) remember(kind);
-    return {version:1,mode,models:Object.fromEntries(['llm','tts','stt'].map(k=>[k,$(k).value])),modelSettings:structuredClone(saved),system:$('system').value,rag:ragSettings()};
+    saveCommon();
+    return {version:3,mode,stages:flowStages(),common:structuredClone(common),models:Object.fromEntries(['llm','tts','stt'].map(k=>[k,$(k).value])),modelSettings:structuredClone(saved),system:$('system').value,rag:ragSettings()};
   }
   function populate(select,rows,placeholder) {
     const old = select.value; select.replaceChildren(new Option(placeholder,''));
@@ -81,6 +103,7 @@
   }
   function renderCollection() {
     const c = library.collections.find(c=>c.id===$('manageCollection').value);
+    $('uploadTarget').textContent=c?`업로드 위치: ${c.name}`:'업로드 위치: 새 문서 모음 (자동 생성)';
     $('documents').replaceChildren();
     if (!c) return;
     $('embedding').value = c.embedding; $('chunkSize').value = c.size; $('chunkOverlap').value = c.overlap;
@@ -105,7 +128,7 @@
   async function perform(message,fn) {
     const controls=[...$('studioSettings').querySelectorAll('button,input,select,textarea')].filter(e=>e.id!=='closeSettings');
     controls.forEach(e=>e.disabled=true); $('libraryStatus').textContent=message;
-    try { await fn(); $('libraryStatus').textContent='완료했습니다.'; }
+    try { const message=await fn(); $('libraryStatus').textContent=typeof message==='string'?message:'완료했습니다.'; }
     catch(e) { $('libraryStatus').textContent=e.message; }
     finally { controls.forEach(e=>e.disabled=false); }
   }
@@ -115,8 +138,8 @@
   };
   window.studioRequest=()=>{
     const options={};
-    for(const kind of ['llm','tts','stt']){remember(kind);options[kind]=readOptions(kind);}
-    return {options,rag:ragSettings()};
+    for(const kind of ['llm','tts','stt']){remember(kind);options[kind]=$(kind+'OptionsEnabled')?.checked ? readOptions(kind) : Object.fromEntries((model(kind)?.options||[]).map(f=>[f.key,f.default]));}
+    return {options,rag:ragSettings(),system:$('systemEnabled').checked?$('system').value:''};
   };
   window.studioResult=(box,job)=>{
     if(job.rag?.enabled){const details=document.createElement('details');const title=document.createElement('summary');title.textContent=`검색된 근거 (${job.sources.length})`;const content=document.createElement('div');sourcesView(content,job.sources);details.append(title,content);box.append(details);}
@@ -124,20 +147,45 @@
     title.textContent='실제 실행 설정';content.className='settings-view';content.textContent=JSON.stringify({models:job.settings,rag:job.rag},null,2);details.append(title,content);box.append(details);
   };
   for(const kind of ['llm','tts','stt'])$(kind).addEventListener('change',()=>render(kind));
-  $('system').addEventListener('change',()=>remember('llm'));
-  document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{$('ragSettings').hidden=mode==='tts';}));
-  for(const id of ['ragEnabled','ragCollection','ragTopK'])$(id).addEventListener('change',()=>clear());
-  $('openSettings').onclick=()=>{capture();$('systemEditor').value=$('system').value;$('studioSettings').showModal();};
+  if(typeof common.system==='string')$('system').value=common.system;
+  for(const id of ['systemEnabled','historyEnabled','autoplayEnabled']){$(id).checked=common[id]!==false;$(id).addEventListener('change',()=>{saveCommon();syncCommon();if(id!=='autoplayEnabled')clear();});}
+  $('system').addEventListener('change',saveCommon);
+  for(const k of ['stt','llm','tts'])$('stage-'+k).addEventListener('change',syncCommon);
+  for(const id of ['ragEnabled','ragCollection','ragTopK'])$(id).addEventListener('change',()=>{syncCommon();clear();});
+  syncCommon();
+  function openSettings(ragOnly=false) {
+    capture();$('systemEditor').value=$('system').value;
+    $('studioSettings').classList.toggle('rag-only',ragOnly);
+    $('settingsTitle').textContent=ragOnly?'RAG 문서 업로드·설정':'프리셋과 문서 관리';
+    if(ragOnly&&$('ragCollection').value){$('manageCollection').value=$('ragCollection').value;renderCollection();}
+    $('studioSettings').showModal();
+    if(ragOnly){$('chooseDocuments').focus();$('studioSettings').scrollTop=0;}
+  }
+  $('openSettings').onclick=()=>openSettings();
+  $('openRag').onclick=()=>openSettings(true);
+  $('useRag').onclick=()=>{
+    const c=library.collections.find(c=>c.id===$('manageCollection').value);
+    if(!c?.documents.length){$('libraryStatus').textContent='문서 모음을 선택하고 문서를 먼저 업로드하세요.';return;}
+    if(!flowStages().llm)setFlow({...flowStages(),llm:true});
+    $('ragCollection').value=c.id;$('ragEnabled').checked=true;
+    syncCommon();
+    $('ragSettings').querySelector('details').open=true;
+    clear();$('studioSettings').close();
+    status(`문서 모음 ‘${c.name}’을 적용했습니다. 문서에 관해 질문하세요.`);
+    $('prompt').focus();
+  };
   $('closeSettings').onclick=()=>$('studioSettings').close();
-  $('applySystem').onclick=()=>{$('system').value=$('systemEditor').value;remember('llm');clear();$('libraryStatus').textContent='프롬프트를 적용하고 새 대화를 시작했습니다.';};
+  $('applySystem').onclick=()=>{$('system').value=$('systemEditor').value;$('systemEnabled').checked=true;saveCommon();syncCommon();clear();$('libraryStatus').textContent='공통 프롬프트를 켜고 새 대화를 시작했습니다.';};
   $('presetSelect').onchange=()=>{$('presetName').value=library.presets.find(p=>p.id===$('presetSelect').value)?.name||'';};
   $('applyPreset').onclick=()=>{
     const preset=library.presets.find(p=>p.id===$('presetSelect').value);if(!preset){status('적용할 프리셋을 선택하세요.');return;}
     const value=preset.settings;
-    document.querySelector(`[data-mode="${['chat','tts','pipeline','voice'].includes(value.mode)?value.mode:'chat'}"]`).click();
+    setFlow(value.stages || {stt:value.mode==='voice',llm:value.mode!=='tts',tts:value.mode!=='chat'});
     saved={...saved,...value.modelSettings};persist();const missing=[];
     for(const kind of ['llm','tts','stt']){const id=value.models?.[kind]||'';$(kind).value=id;if(id&&!$(kind).value)missing.push(kind);render(kind);}
     $('system').value=value.system||'';remember('llm');$('ragEnabled').checked=!!value.rag?.enabled;$('ragCollection').value=value.rag?.collection||'';$('ragTopK').value=value.rag?.top_k||3;
+    for(const id of ['systemEnabled','historyEnabled','autoplayEnabled'])$(id).checked=value.common?.[id]!==false;
+    saveCommon();syncCommon();
     lastModel=$('llm').value;clear();ttsInfo();availability();
     if(missing.length)status('프리셋 모델이 현재 연결되지 않았습니다: '+missing.join(', '));
     if($('ragEnabled').checked&&!$('ragCollection').value)status('프리셋의 문서 모음이 없습니다. 다시 선택해 주세요.');
@@ -160,14 +208,31 @@
   });
   $('reindexCollection').onclick=()=>perform('문서 전체를 재색인하고 있습니다…',async()=>{update(await api('/api/library/reindex',{id:$('manageCollection').value,...indexSettings()}));clear();});
   $('deleteCollection').onclick=()=>perform('문서 모음 삭제 중…',async()=>{update(await api('/api/library/collection-delete',{id:$('manageCollection').value}));clear();});
-  $('uploadFiles').onchange=()=>perform('문서 텍스트 추출·색인 중…',async()=>{
-    for(const file of $('uploadFiles').files){
+  $('chooseDocuments').onclick=()=>$('uploadFiles').click();
+  $('uploadFiles').onchange=()=>{
+    const files=[...$('uploadFiles').files];
+    $('uploadFiles').value='';
+    if(!files.length)return;
+    return perform('문서 텍스트 추출·색인 중…',async()=>{
+    for(const file of files){
       if(file.size>5_000_000)throw Error('파일당 최대 5MB입니다.');
+      if(!/\.(txt|md|pdf)$/i.test(file.name))throw Error('TXT·MD·PDF 파일을 선택하세요.');
+    }
+    if(!$('manageCollection').value){
+      const previous=new Set(library.collections.map(c=>c.id));
+      update(await api('/api/library/collection-create',{name:($('collectionName').value.trim()||files[0].name).slice(0,120),embedding:'lexical',size:800,overlap:100}));
+      const created=library.collections.find(c=>!previous.has(c.id));
+      if(!created)throw Error('문서 모음을 만들지 못했습니다. 다시 시도하세요.');
+      $('manageCollection').value=created.id;$('ragCollection').value=created.id;renderCollection();
+    }
+    for(const file of files){
+      $('libraryStatus').textContent=`${file.name} 업로드·색인 중…`;
       const content=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=()=>reject(Error('파일을 읽지 못했습니다'));reader.readAsDataURL(file);});
       update(await api('/api/library/upload',{collection:$('manageCollection').value,name:file.name,content}));
     }
-    $('uploadFiles').value='';clear();
-  });
+    clear();
+    return `${files.length}개 파일 색인 완료. 아래 ‘이 문서 모음으로 대화하기’를 눌러 적용하세요.`;
+  });};
   $('previewSearch').onclick=async()=>{try{$('previewSearch').disabled=true;const result=await api('/api/library/search',{query:$('prompt').value,rag:{...ragSettings(),enabled:true}});sourcesView($('searchPreview'),result.sources);}catch(e){$('searchPreview').textContent=e.message;}finally{$('previewSearch').disabled=false;}};
   // The model fetch can finish before this script has loaded on a very fast local server.
   if(models.length&&!initialized)window.studioRefresh().catch(e=>status(e.message));
